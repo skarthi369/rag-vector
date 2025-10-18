@@ -22,7 +22,7 @@ from langchain_groq import ChatGroq
 MODEL_OPTIONS = {
   "Groq": {
     "playground": "https://console.groq.com/",
-    "models": ["llama3-8b-8192", "llama3-70b-8192"]  # Updated model names for accuracy
+    "models": ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]  # Updated to current production models (post-deprecation)
   },
   "Gemini": {
     "playground": "https://aistudio.google.com/app/apikey",  # More direct link for API key
@@ -98,6 +98,26 @@ def render_download_chat_history():
   df = pd.DataFrame(st.session_state.chat_history, columns=["Question", "Answer", "Model", "Model Name", "PDF File", "Timestamp"])
   with st.expander("**📎 Download Chat History:**"):
     st.sidebar.download_button("📥 Download Chat History", data=df.to_csv(index=False), file_name="chat_history.csv", mime="text/csv")
+
+def render_footer():
+    """Renders a professional footer with branding and links."""
+    st.markdown("---")  # Horizontal divider
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col1:
+        st.markdown("**👨‍💼 AugmentIQ**")
+        st.markdown("*AI-Powered Knowledge Tools*")
+    
+    with col2:
+        st.markdown("**🔗 Quick Links**")
+        st.markdown("[GitHub Repo](https://github.com/yourusername/augmentiq-rag-pdfbot) | [Demo Video](https://www.linkedin.com/posts/your-post-link) | [Contact Us](mailto:hello@augmentiq.com)")
+        st.caption("© 2025 AugmentIQ. All rights reserved. | Privacy Policy")
+    
+    with col3:
+        st.markdown("**🛠️ Built With**")
+        st.markdown("Streamlit • LangChain • FAISS • Groq/Gemini")
+    
+    st.markdown("---")
 
 # ------------------ Main App ------------------ #
 def main():
@@ -222,6 +242,8 @@ def main():
 
   if st.session_state.chat_history:
     render_download_chat_history()
+
+  render_footer()  # Render the footer at the bottom
 
 if __name__ == "__main__":
   main()
