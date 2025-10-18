@@ -110,7 +110,7 @@ def render_footer():
     
     with col2:
         st.markdown("**🔗 Quick Links**")
-        st.markdown("[GitHub Repo](https://github.com/yourusername/augmentiq-rag-pdfbot) | [Demo Video](https://www.linkedin.com/posts/your-post-link) | [Contact Us](mailto:hello@augmentiq.com)")
+        st.markdown("[GitHub Repo](https://github.com/skarthi369/rag-vector) | [Demo Video](https://www.linkedin.com/posts/karthi-keyan-s-115524274_ai-rag-productivity-activity-7385352803747057664-JZoh?utm_source=share&utm_medium=member_desktop&rcm=ACoAAEL_OaEBKtaz7Lmb3gg_whEbFVnX2oMOqGU) | [Contact Us](mailto:learndemokart@gmail.com)")
         st.caption("© 2025 AugmentIQ. All rights reserved. | Privacy Policy")
     
     with col3:
