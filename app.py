@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 from PyPDF2 import PdfReader
 
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains.question_answering import load_qa_chain
 
