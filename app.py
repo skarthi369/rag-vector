@@ -22,11 +22,11 @@ from langchain_groq import ChatGroq
 MODEL_OPTIONS = {
   "Groq": {
     "playground": "https://console.groq.com/",
-    "models": ["llama-3.1-8b-instant", "llama3-70b-8192"]
+    "models": ["llama3-8b-8192", "llama3-70b-8192"]  # Updated model names for accuracy
   },
   "Gemini": {
-    "playground": "https://generativelanguage.googleapis.com/v1/models",
-    "models": ["gemini-2.0-flash", "gemini-2.5-flash"]
+    "playground": "https://aistudio.google.com/app/apikey",  # More direct link for API key
+    "models": ["gemini-1.5-flash", "gemini-1.5-pro"]  # Updated to stable models
   }
 }
 
@@ -77,7 +77,7 @@ def get_qa_chain(provider, model, api_key):
     """,
     input_variables=["context", "question"]
   )
-  llm = ChatGroq(model=model, api_key=api_key) if provider.lower() == "groq" else ChatGoogleGenerativeAI(model=model, api_key=api_key)
+  llm = ChatGroq(model=model, api_key=api_key) if provider.lower() == "groq" else ChatGoogleGenerativeAI(model=model, google_api_key=api_key)
   return load_qa_chain(llm, chain_type="stuff", prompt=prompt)
 
 def process_and_store_pdfs(pdfs, provider, api_key):
@@ -105,76 +105,86 @@ def main():
   st.title(" RAG PDFBot")
   st.caption("Chat with multiple PDFs :books:")
 
-  for key, default in {
+  # Initialize session state
+  defaults = {
     "chat_history": [],
     "pdfs_submitted": False,
     "vector_store": None,
     "pdf_files": [],
     "last_provider": None,
     "unsubmitted_files": False,
-  }.items():
+  }
+  for key, default in defaults.items():
     if key not in st.session_state:
       st.session_state[key] = default
 
   # Sidebar Configuration
   with st.sidebar:
     with st.expander("⚙️ Configuration", expanded=True):
-      model_provider = st.selectbox("🔌 Model Provider", ["Select a model provider"] + list(MODEL_OPTIONS.keys()), index=0, key="model_provider")
+      model_provider_key = "model_provider_select"  # Unique key to avoid conflicts
+      model_provider = st.selectbox("🔌 Model Provider", ["Select a model provider"] + list(MODEL_OPTIONS.keys()), index=0, key=model_provider_key)
 
       if model_provider == "Select a model provider":
-        return
+        st.stop()  # Early exit instead of return for better flow
 
-      api_key = st.text_input("🔑 Enter your API Key", help=f"Get API key from [here]({MODEL_OPTIONS[model_provider]['playground']})")
+      api_key_key = f"api_key_{model_provider.lower()}"
+      api_key = st.text_input("🔑 Enter your API Key", help=f"Get API key from [here]({MODEL_OPTIONS[model_provider]['playground']})", key=api_key_key, type="password")
       if not api_key:
-        return
+        st.stop()
 
+      models_key = f"model_select_{model_provider.lower()}"
       models = MODEL_OPTIONS[model_provider]["models"]
-      model = st.selectbox("🧠 Select a model", models, key="model")
+      model = st.selectbox("🧠 Select a model", models, key=models_key)
 
-      uploaded_files = st.file_uploader("📚 Upload PDFs", type=["pdf"], accept_multiple_files=True, key="pdf_uploader")
+      uploader_key = "pdf_uploader"
+      uploaded_files = st.file_uploader("📚 Upload PDFs", type=["pdf"], accept_multiple_files=True, key=uploader_key)
 
       if uploaded_files and uploaded_files != st.session_state.pdf_files:
         st.session_state.unsubmitted_files = True
 
-      if st.button("➡️ Submit"):
+      if st.button("➡️ Submit", key="submit_btn"):
         if uploaded_files:
           with st.spinner("Processing PDFs..."):
             process_and_store_pdfs(uploaded_files, model_provider, api_key)
             st.session_state.pdf_files = uploaded_files
             st.session_state.unsubmitted_files = False
+            st.session_state.last_provider = model_provider  # Track here too
             st.toast("PDFs processed successfully!", icon="✅")
         else:
           st.warning("No files uploaded.")
 
-      if model_provider != st.session_state.last_provider:
+      # Reprocess on provider change
+      if model_provider != st.session_state.last_provider and st.session_state.pdf_files:
         st.session_state.last_provider = model_provider
-        if st.session_state.pdf_files:
-          with st.spinner("Reprocessing PDFs..."):
-            process_and_store_pdfs(st.session_state.pdf_files, model_provider, api_key)
-            st.toast("PDFs reprocessed successfully!", icon="🔁")
+        with st.spinner("Reprocessing PDFs..."):
+          process_and_store_pdfs(st.session_state.pdf_files, model_provider, api_key)
+          st.toast("PDFs reprocessed successfully!", icon="🔁")
 
     with st.expander("🛠️ Tools", expanded=False):
       col1, col2, col3 = st.columns(3)
 
-      if col1.button("🔄 Reset"):
-        st.session_state.clear()
-        st.session_state.model_provider = "Select a model provider"
+      if col1.button("🔄 Reset", key="reset_btn"):
+        for key in list(st.session_state.keys()):
+          del st.session_state[key]
         st.rerun()
 
-      if col2.button("🧹 Clear Chat"):
+      if col2.button("🧹 Clear Chat", key="clear_btn"):
         st.session_state.chat_history = []
-        st.session_state.pdf_files = None
+        st.session_state.pdf_files = []
         st.session_state.vector_store = None
         st.session_state.pdfs_submitted = False
+        st.session_state.unsubmitted_files = False
         st.toast("Chat and PDF cleared.", icon="🧼")
+        st.rerun()
 
-      if col3.button("↩️ Undo") and st.session_state.chat_history:
+      if col3.button("↩️ Undo", key="undo_btn") and st.session_state.chat_history:
         st.session_state.chat_history.pop()
         st.rerun()
 
   if st.session_state.pdfs_submitted and st.session_state.pdf_files:
     render_uploaded_files()
 
+  # Render chat history
   for q, a, *_ in st.session_state.chat_history:
     with st.chat_message("user"):
       st.markdown(q)
@@ -183,26 +193,32 @@ def main():
 
   if st.session_state.unsubmitted_files:
     st.warning("📄 New PDFs uploaded. Please submit before chatting.")
-    return
+    st.stop()
 
-  if st.session_state.pdfs_submitted:
-    question = st.chat_input("💬 Ask a Question from the PDF Files")
-    if question:
-      with st.chat_message("user"):
-        st.markdown(question)
-      with st.chat_message("ai"):
-        with st.spinner("Thinking..."):
-          try:
-            docs = st.session_state.vector_store.similarity_search(question)
-            chain = get_qa_chain(model_provider, model, api_key)
-            output = chain({"input_documents": docs, "question": question}, return_only_outputs=True)["output_text"]
-            st.markdown(output)
-            pdf_names = [f.name for f in st.session_state.pdf_files]
-            st.session_state.chat_history.append((question, output, model_provider, model, pdf_names, datetime.now()))
-          except Exception as e:
-            st.error(f"Error: {str(e)}")
-  else:
+  if not st.session_state.pdfs_submitted:
     st.info("📄 Please upload and submit PDFs to start chatting.")
+    st.stop()
+
+  # Chat input
+  question = st.chat_input("💬 Ask a Question from the PDF Files")
+  if question:
+    with st.chat_message("user"):
+      st.markdown(question)
+    with st.chat_message("ai"):
+      with st.spinner("Thinking..."):
+        try:
+          # Use current provider/model from sidebar (fetch fresh to avoid stale state)
+          current_provider = st.session_state[model_provider_key]
+          current_model = st.session_state[models_key]
+          current_api_key = st.session_state[api_key_key]
+          docs = st.session_state.vector_store.similarity_search(question)
+          chain = get_qa_chain(current_provider, current_model, current_api_key)
+          output = chain({"input_documents": docs, "question": question}, return_only_outputs=True)["output_text"]
+          st.markdown(output)
+          pdf_names = [f.name for f in st.session_state.pdf_files]
+          st.session_state.chat_history.append((question, output, current_provider, current_model, pdf_names, datetime.now()))
+        except Exception as e:
+          st.error(f"Error: {str(e)}")
 
   if st.session_state.chat_history:
     render_download_chat_history()
