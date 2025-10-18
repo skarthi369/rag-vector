@@ -1,9 +1,12 @@
+streamlit
 pandas
 PyPDF2
-streamlit
 faiss-cpu
-langchain
+langchain>=0.1.0
 langchain-community
 langchain-groq
 langchain-google-genai
 sentence-transformers
+python-dotenv
+tiktoken
+openai
