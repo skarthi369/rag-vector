@@ -1,4 +1,3 @@
-pip==25.2.0  # Ensures clean upgrades and better dep resolution
 streamlit==1.50.0
 pandas==2.2.2  # Downgraded slightly for numpy stability with FAISS
 PyPDF2==3.0.1
