@@ -1,12 +1,15 @@
+pip==25.2.0  # Installs/upgrades pip first to resolve notices and improve dependency solving
 streamlit==1.50.0
 pandas==2.3.3
 PyPDF2==3.0.1
 beautifulsoup4==4.12.3
-langchain==0.3.2
-langchain-community==0.3.2
-langchain-google-genai==1.1.2
+langchain==0.3.0  # Stable; avoids 0.3.2 sub-dep issues
+langchain-community==0.3.0
+langchain-google-genai==1.1.0
 langchain-groq==0.3.0
-sentence-transformers==3.1.1
-faiss-cpu==1.8.0
-google-generativeai==0.8.3
-groq==0.11.1
+sentence-transformers==3.0.1  # Lighter version without extra build deps
+faiss-cpu==1.7.4  # Proven stable in Cloud; avoids numpy 2.x conflicts
+google-generativeai==0.8.0
+groq==0.11.0
+numpy==1.26.4  # Explicit pin to resolve FAISS/LangChain clashes
+orjson==3.10.3  # Pre-compiled wheel to bypass Rust/Cargo errors in langsmith
