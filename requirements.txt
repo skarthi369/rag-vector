@@ -1,13 +1,18 @@
 streamlit==1.50.0
-pandas==2.2.2  # Downgraded slightly for numpy stability with FAISS
+pandas==2.2.2
 PyPDF2==3.0.1
 beautifulsoup4==4.12.3
-langchain==0.2.16  # Older stable; avoids 0.3.x build issues in Cloud
+
+langchain==0.2.16
 langchain-community==0.2.16
 langchain-google-genai==1.0.10
-langchain-groq==0.2.0  # Lighter; reduces transitive deps
+langchain-groq==0.2.0
+
+sentence-transformers==3.0.1
+faiss-cpu==1.7.4
+
 google-generativeai==0.8.0
 groq==0.11.0
-numpy==1.26.4  # Explicit for embedding/FAISS compatibility
-faiss-cpu==1.7.4  # Avoids latest 1.8.x numpy 2.x conflicts
-sentence-transformers==3.0.1  # Minimal; no extra models
+numpy==1.26.4
+orjson==3.10.3
+
