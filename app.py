@@ -15,6 +15,9 @@ from langchain_google_genai import (
     ChatGoogleGenerativeAI
 )
 from langchain_groq import ChatGroq
+from io import BytesIO
+import os
+
 
 # ------------------ Model Configuration ------------------ #
 MODEL_OPTIONS = {
@@ -28,12 +31,14 @@ MODEL_OPTIONS = {
     }
 }
 
+
 # ------------------ Utility Functions ------------------ #
 def get_pdf_text(pdf_files):
     text = ""
     for file in pdf_files:
         try:
-            reader = PdfReader(file)
+            pdf_bytes = file.read()
+            reader = PdfReader(BytesIO(pdf_bytes))
             for page in reader.pages:
                 extracted = page.extract_text()
                 if extracted:
@@ -41,6 +46,7 @@ def get_pdf_text(pdf_files):
         except Exception as e:
             st.error(f"Failed to extract text from {file.name}: {str(e)}")
     return text
+
 
 def get_web_text(url):
     if not url:
@@ -69,9 +75,11 @@ def get_web_text(url):
         st.error(f"Failed to scrape URL {url}: {str(e)}")
         return ""
 
+
 def get_text_chunks(text):
     splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
     return splitter.split_text(text)
+
 
 def get_embeddings(provider, api_key=None):
     if provider.lower() == "groq":
@@ -81,15 +89,32 @@ def get_embeddings(provider, api_key=None):
     else:
         raise ValueError("Unsupported provider")
 
+
 def get_vectorstore(chunks, provider, api_key):
+    os.makedirs("./data", exist_ok=True)
     embedding = get_embeddings(provider, api_key)
     store = FAISS.from_texts(chunks, embedding)
     store.save_local(f"./data/{provider.lower()}_vector_store.faiss")
     return store
 
+
 def load_vectorstore(provider, api_key):
     embedding = get_embeddings(provider, api_key)
     return FAISS.load_local(f"./data/{provider.lower()}_vector_store.faiss", embedding, allow_dangerous_deserialization=True)
+
+
+def get_current_store(provider, api_key):
+    path = f"./data/{provider.lower()}_vector_store.faiss"
+    if os.path.exists(path):
+        try:
+            return load_vectorstore(provider, api_key)
+        except Exception as e:
+            st.error(f"Failed to load vector store: {str(e)}")
+            return None
+    else:
+        st.warning("Vector store not found. Please submit data to create it.")
+        return None
+
 
 def get_qa_chain(provider, model, api_key):
     prompt = PromptTemplate(
@@ -110,31 +135,23 @@ def get_qa_chain(provider, model, api_key):
     llm = ChatGroq(model=model, api_key=api_key) if provider.lower() == "groq" else ChatGoogleGenerativeAI(model=model, google_api_key=api_key)
     return load_qa_chain(llm, chain_type="stuff", prompt=prompt)
 
-def process_and_store_data(pdfs, url, provider, api_key):
-    raw_text = get_pdf_text(pdfs) + "\n\n" + get_web_text(url)
-    if not raw_text.strip():
-        st.error("No content extracted from PDFs or URL. Please ensure valid PDFs or a scrapable URL are provided.")
-        st.session_state.pdfs_submitted = False
-        return
-    chunks = get_text_chunks(raw_text)
-    store = get_vectorstore(chunks, provider, api_key)
-    st.session_state.vector_store = store
-    st.session_state.pdfs_submitted = True
 
 def render_uploaded_files():
-    pdf_files = st.session_state.get("pdf_files", [])
+    pdf_names = st.session_state.get("pdf_names", [])
     url = st.session_state.get("url", "")
-    if pdf_files or url:
+    if pdf_names or url:
         with st.expander("**📎 Uploaded Files & URL:**"):
-            for f in pdf_files:
-                st.markdown(f"- PDF: {f.name}")
+            for name in pdf_names:
+                st.markdown(f"- PDF: {name}")
             if url:
                 st.markdown(f"- URL: {url}")
+
 
 def render_download_chat_history():
     df = pd.DataFrame(st.session_state.chat_history, columns=["Question", "Answer", "Provider", "Model", "Sources", "Timestamp"])
     with st.expander("**📎 Download Chat History:**"):
         st.download_button("📥 Download Chat History", data=df.to_csv(index=False), file_name="chat_history.csv", mime="text/csv")
+
 
 def render_footer():
     st.markdown("---")
@@ -151,6 +168,7 @@ def render_footer():
         st.markdown("Streamlit • LangChain • FAISS • Groq/Gemini")
     st.markdown("---")
 
+
 # ------------------ Main App ------------------ #
 def main():
     st.set_page_config(page_title="RAG PDFBot with Web Scraping", layout="centered")
@@ -161,8 +179,9 @@ def main():
     defaults = {
         "chat_history": [],
         "pdfs_submitted": False,
-        "vector_store": None,
-        "pdf_files": [],
+        "pdf_text": "",
+        "web_text": "",
+        "pdf_names": [],
         "url": "",
         "last_provider": None,
         "unsubmitted_files": False,
@@ -193,9 +212,13 @@ def main():
             uploaded_files = st.file_uploader("📚 Upload PDFs (optional)", type=["pdf"], accept_multiple_files=True, key=uploader_key)
 
             url_key = "url_input"
-            url = st.text_input("🌐 Enter a Website URL (optional)", value=st.session_state.get("url", ""), key=url_key, help="E.g., https://python.langchain.com/docs/tutorials/rag or https://attack.mitre.org/")
+            url = st.text_input("🌐 Enter a Website URL (optional)", value=st.session_state["url"], key=url_key, help="E.g., [https://python.langchain.com/docs/tutorials/rag](https://python.langchain.com/docs/tutorials/rag) or https://attack.mitre.org/")
 
-            has_new_input = (uploaded_files and uploaded_files != st.session_state.pdf_files) or (url and url != st.session_state.url)
+            # Detect changes for resubmission
+            current_pdf_names = [f.name for f in uploaded_files] if uploaded_files else []
+            has_pdf_change = bool(uploaded_files) != bool(st.session_state.pdf_names) or set(current_pdf_names) != set(st.session_state.pdf_names)
+            has_url_change = url != st.session_state.url
+            has_new_input = has_pdf_change or has_url_change
             if has_new_input:
                 st.session_state.unsubmitted_files = True
 
@@ -204,42 +227,63 @@ def main():
                     st.error("Please upload at least one PDF or provide a valid URL.")
                     st.stop()
                 with st.spinner("Processing PDFs and/or scraping URL..."):
-                    process_and_store_data(uploaded_files, url, model_provider, api_key)
-                    if st.session_state.pdfs_submitted:
-                        st.session_state.pdf_files = uploaded_files
-                        st.session_state.url = url
-                        st.session_state.unsubmitted_files = False
-                        st.session_state.last_provider = model_provider
-                        st.toast("Data processed successfully!", icon="✅")
+                    pdf_text = get_pdf_text(uploaded_files)
+                    web_text = get_web_text(url)
+                    raw_text = pdf_text + "\n\n" + web_text if pdf_text and web_text else pdf_text or web_text
+                    if not raw_text.strip():
+                        st.error("No content extracted from PDFs or URL. Please ensure valid PDFs or a scrapable URL are provided.")
+                        st.session_state.pdfs_submitted = False
+                        st.stop()
+                    st.session_state.pdf_text = pdf_text
+                    st.session_state.web_text = web_text
+                    st.session_state.pdf_names = current_pdf_names
+                    st.session_state.url = url
+                    chunks = get_text_chunks(raw_text)
+                    get_vectorstore(chunks, model_provider, api_key)  # Saves to disk
+                    st.session_state.pdfs_submitted = True
+                    st.session_state.unsubmitted_files = False
+                    st.session_state.last_provider = model_provider
+                    st.toast("Data processed successfully!", icon="✅")
 
             # Reprocess on provider change
-            if model_provider != st.session_state.last_provider and (st.session_state.pdf_files or st.session_state.url):
+            if st.session_state.pdfs_submitted and model_provider != st.session_state.last_provider:
                 st.session_state.last_provider = model_provider
-                with st.spinner("Reprocessing data..."):
-                    process_and_store_data(st.session_state.pdf_files, st.session_state.url, model_provider, api_key)
-                    if st.session_state.pdfs_submitted:
-                        st.toast("Data reprocessed successfully!", icon="🔁")
+                with st.spinner("Reprocessing data with new provider..."):
+                    pdf_text = st.session_state.pdf_text
+                    web_text = st.session_state.web_text
+                    raw_text = pdf_text + "\n\n" + web_text if pdf_text and web_text else pdf_text or web_text
+                    chunks = get_text_chunks(raw_text)
+                    get_vectorstore(chunks, model_provider, api_key)  # Saves new provider's store to disk
+                    st.toast("Data reprocessed successfully!", icon="🔁")
 
         with st.expander("🛠️ Tools", expanded=False):
             col1, col2, col3 = st.columns(3)
             if col1.button("🔄 Reset", key="reset_btn"):
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
+                # Optional: Clean data files
+                for file_path in glob("./data/*.faiss"):
+                    os.remove(file_path)
                 st.rerun()
             if col2.button("🧹 Clear Chat", key="clear_btn"):
                 st.session_state.chat_history = []
-                st.session_state.pdf_files = []
+                st.session_state.pdf_text = ""
+                st.session_state.web_text = ""
+                st.session_state.pdf_names = []
                 st.session_state.url = ""
                 st.session_state.vector_store = None
                 st.session_state.pdfs_submitted = False
                 st.session_state.unsubmitted_files = False
+                # Optional: Clean data files
+                for file_path in glob("./data/*.faiss"):
+                    os.remove(file_path)
                 st.toast("Chat and data cleared.", icon="🧼")
                 st.rerun()
             if col3.button("↩️ Undo", key="undo_btn") and st.session_state.chat_history:
                 st.session_state.chat_history.pop()
                 st.rerun()
 
-    if st.session_state.pdfs_submitted and (st.session_state.pdf_files or st.session_state.url):
+    if st.session_state.pdfs_submitted:
         render_uploaded_files()
 
     # Render chat history
@@ -268,20 +312,23 @@ def main():
                     current_provider = st.session_state[model_provider_key]
                     current_model = st.session_state[models_key]
                     current_api_key = st.session_state[api_key_key]
-                    docs = st.session_state.vector_store.similarity_search(question, k=4)
+                    store = get_current_store(current_provider, current_api_key)
+                    if store is None:
+                        raise ValueError("Vector store not available. Please submit data.")
+                    docs = store.similarity_search(question, k=4)
                     chain = get_qa_chain(current_provider, current_model, current_api_key)
                     output = chain({"input_documents": docs, "question": question}, return_only_outputs=True)["output_text"]
                     st.markdown(output)
-                    pdf_names = [f.name for f in st.session_state.pdf_files]
-                    sources = pdf_names + [st.session_state.url] if st.session_state.url else pdf_names
+                    sources = st.session_state.pdf_names + ([st.session_state.url] if st.session_state.url else [])
                     st.session_state.chat_history.append((question, output, current_provider, current_model, sources, datetime.now()))
                 except Exception as e:
-                    st.error(f"Error: {str(e)}")
+                    st.error(f"Error during query: {str(e)}")
 
     if st.session_state.chat_history:
         render_download_chat_history()
 
     render_footer()
+
 
 if __name__ == "__main__":
     main()
