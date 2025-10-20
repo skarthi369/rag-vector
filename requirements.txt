@@ -1,9 +1,14 @@
+# Core app framework
 streamlit==1.39.0
 pandas==2.2.3
 PyPDF2==3.0.1
+
+# LangChain core + integrations
 langchain==0.2.16
 langchain-community==0.2.16
 langchain-google-genai==1.0.3
 langchain-groq==0.0.3
+
+# Vector search + embeddings
 faiss-cpu==1.8.0
 sentence-transformers==2.7.0
